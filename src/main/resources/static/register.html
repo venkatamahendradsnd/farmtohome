@@ -16,29 +16,48 @@
         <h2 style="margin-top: 0;">Create Account</h2>
         <p>Join our community of farmers and consumers</p>
 
-        <form id="registerForm">
+        <!-- fallback form action for non-JS clients -->
+        <form id="registerForm" action="/api/auth/register" method="post">
             <div class="form-group">
                 <label>Full Name</label>
-                <input type="text" id="name" required placeholder="John Doe">
+                <input type="text" id="name" name="name" required placeholder="John Doe">
             </div>
             <div class="form-group">
                 <label>Email Address</label>
-                <input type="email" id="email" required placeholder="email@example.com">
+                <input type="email" id="email" name="email" required placeholder="email@example.com">
             </div>
             <div class="form-group">
                 <label>Password</label>
-                <input type="password" id="password" required placeholder="Create a password">
+                <input type="password" id="password" name="password" required placeholder="Create a password">
             </div>
             <div class="form-group">
                 <label>I want to join as:</label>
-                <select id="role">
+                <select id="role" name="role">
                     <option value="CUSTOMER">Customer</option>
                     <option value="FARMER">Farmer</option>
                 </select>
             </div>
+            <div id="farmerFields" style="display:none;">
+                <div class="form-group">
+                    <label>Farm Name</label>
+                    <input type="text" id="farmName" name="farmName" placeholder="e.g., Green Valley Farms">
+                </div>
+                <div class="form-group">
+                    <label>State</label>
+                    <input type="text" id="state" name="state" placeholder="State">
+                </div>
+                <div class="form-group">
+                    <label>District</label>
+                    <input type="text" id="district" name="district" placeholder="District">
+                </div>
+                <div class="form-group">
+                    <label>Pickup Address (Required for Farmer)</label>
+                    <input type="text" id="pickupAddress" name="pickupAddress" placeholder="Farm/shop pickup address">
+                </div>
+            </div>
             <button type="submit" class="btn-primary">Register</button>
         </form>
-        <p class="auth-link">Already have an account? <a href="login.html">Login here</a></p>
+        <p class="auth-link">Already have an account? <a href="signin.html">Login here</a></p>
         <p class="auth-link"><a href="index.html">Back to Home</a></p>
     </div>
 

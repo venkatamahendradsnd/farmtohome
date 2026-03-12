@@ -59,7 +59,7 @@
         </div>
     </div>
 
-    <script src="js/auth.js"></script>
+    <script src="js/auth.js?v=8"></script>
     <script src="js/nav.js"></script>
     <script>
         let currentFarmerId = null;
@@ -91,12 +91,20 @@
                     <div style="background: white; padding: 1.5rem; border-radius: 8px; margin-bottom: 1rem; box-shadow: 0 4px 15px rgba(0,0,0,0.05);">
                         <div style="display: flex; justify-content: space-between; margin-bottom: 1rem;">
                             <div style="font-weight: 700;">Order #${order.id}</div>
-                            <div class="status-badge status-${order.status}">${order.status}</div>
                             <div class="status-badge status-${order.status}">${order.status.replace(/_/g, ' ')}</div>
                         </div>
                         <div style="font-size: 0.9rem; color: #666;">
                             Date: ${new Date(order.createdAt).toLocaleDateString()}
                         </div>
+                        <div style="font-size: 0.9rem; color: #666; margin-top: 0.25rem;">
+                            ${order.deliveryType ? `<span style="font-weight:600;">${order.deliveryType}</span>` : ''}
+                            ${order.preferredSlot ? ` • Slot: ${order.preferredSlot}` : ''}
+                        </div>
+                        ${order.deliveryType === 'PICKUP' ? `
+                            <div style="font-size:0.9rem; color:#444; margin-top:0.35rem;">
+                                Pickup Address: <strong>${order.deliveryAddress || 'Not available'}</strong>
+                            </div>
+                        ` : ''}
                         <div style="font-weight: 700; margin-top: 0.5rem; font-size: 1.1rem;">₹${order.totalAmount}</div>
                         
                         ${canCancel(order.status) ?
@@ -114,7 +122,7 @@
         }
 
         function canCancel(status) {
-            return ['WAITING_FOR_FARMER_APPROVAL', 'FARMER_APPROVED', 'ORDER_PLACED'].includes(status);
+            return ['PLACED', 'ACCEPTED', 'WAITING_FOR_FARMER_APPROVAL', 'FARMER_APPROVED'].includes(status);
         }
 
         async function cancelOrder(orderId) {

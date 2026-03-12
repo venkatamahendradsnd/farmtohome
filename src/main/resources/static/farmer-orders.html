@@ -23,7 +23,10 @@
                     <th style="text-align: left; padding: 1rem;">Order ID</th>
                     <th style="text-align: left; padding: 1rem;">Customer</th>
                     <th style="text-align: left; padding: 1rem;">Products</th>
-                    <th style="text-align: left; padding: 1rem;">Delivery Address</th>
+                    <th style="text-align: left; padding: 1rem;">Delivery Type</th>
+                    <th style="text-align: left; padding: 1rem;">Delivery / Pickup Address</th>
+                    <th style="text-align: left; padding: 1rem;">Payment</th>
+                    <th style="text-align: left; padding: 1rem;">Preferred Slot</th>
                     <th style="text-align: left; padding: 1rem;">Contact</th>
                     <th style="text-align: left; padding: 1rem;">Total Amount</th>
                     <th style="text-align: left; padding: 1rem;">Status</th>
@@ -33,7 +36,7 @@
             </thead>
             <tbody id="orders-body">
                 <tr>
-                    <td colspan="5" style="padding: 1rem;">Loading...</td>
+                    <td colspan="12" style="padding: 1rem;">Loading...</td>
                 </tr>
             </tbody>
         </table>
@@ -55,7 +58,7 @@
 
                 const tbody = document.getElementById('orders-body');
                 if (orders.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="9" style="padding: 1rem;">No orders found.</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="12" style="padding: 1rem;">No orders found.</td></tr>';
                     return;
                 }
 
@@ -72,14 +75,21 @@
                                 `).join('') : '<span style="color: #ccc;">No items</span>'}
                             </div>
                         </td>
+                        <td style="padding: 1rem;">${order.deliveryType || '<span style="color:#ccc;">N/A</span>'}</td>
                         <td style="padding: 1rem;">
-                            ${order.address ? `
+                            ${order.deliveryAddress ? `
+                                <div style="font-size: 0.9rem;">
+                                    <div><strong>${order.deliveryAddress}</strong></div>
+                                </div>
+                            ` : (order.address ? `
                                 <div style="font-size: 0.9rem;">
                                     <div><strong>${order.address.area}</strong></div>
                                     <div style="font-size: 0.85rem; color: #666;">${order.address.district}, ${order.address.state} - ${order.address.pincode}</div>
                                 </div>
-                            ` : '<span style="color: #ccc;">No address provided</span>'}
+                            ` : '<span style="color: #ccc;">No address provided</span>')}
                         </td>
+                        <td style="padding: 1rem;">${order.paymentMethod || '<span style="color:#ccc;">N/A</span>'}</td>
+                        <td style="padding: 1rem;">${order.preferredSlot || '<span style="color:#ccc;">N/A</span>'}</td>
                         <td style="padding: 1rem;">
                             ${order.contactNumber || '<span style="color: #ccc;">N/A</span>'}
                         </td>
@@ -107,20 +117,24 @@
 
         function renderActionButtons(order) {
             let btns = '';
+            const s = order.status === 'WAITING_FOR_FARMER_APPROVAL' ? 'PLACED'
+                : order.status === 'FARMER_APPROVED' ? 'ACCEPTED'
+                : order.status === 'REJECTED' ? 'CANCELLED'
+                : order.status;
 
-            if (order.status === 'WAITING_FOR_FARMER_APPROVAL') {
-                btns += `<button onclick="updateStatus(${order.id}, 'FARMER_APPROVED')" style="background: green; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; margin-right: 5px;">Approve</button>`;
-                btns += `<button onclick="updateStatus(${order.id}, 'REJECTED')" style="background: red; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer;">Reject</button>`;
-            } else if (order.status === 'FARMER_APPROVED') {
+            if (s === 'PLACED') {
+                btns += `<button onclick="updateStatus(${order.id}, 'ACCEPTED')" style="background: green; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; margin-right: 5px;">Accept</button>`;
+                btns += `<button onclick="updateStatus(${order.id}, 'CANCELLED')" style="background: red; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer;">Cancel</button>`;
+            } else if (s === 'ACCEPTED') {
                 btns += `<button onclick="updateStatus(${order.id}, 'OUT_FOR_DELIVERY')" style="background: #007bff; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer;">Mark Out for Delivery</button>`;
-            } else if (order.status === 'OUT_FOR_DELIVERY') {
+            } else if (s === 'OUT_FOR_DELIVERY') {
                 btns += `<button onclick="updateStatus(${order.id}, 'DELIVERED')" style="background: #28a745; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer;">Mark Delivered</button>`;
-            } else if (order.status === 'DELIVERED') {
+            } else if (s === 'DELIVERED') {
                 btns += `<span style="color: green;">✓ Completed</span>`;
-            } else if (order.status === 'REJECTED') {
-                btns += `<span style="color: red;">✗ Rejected</span>`;
+            } else if (s === 'CANCELLED') {
+                btns += `<span style="color: red;">✗ Cancelled</span>`;
             } else {
-                btns += `<span>${order.status}</span>`;
+                btns += `<span>${s}</span>`;
             }
             return btns;
         }

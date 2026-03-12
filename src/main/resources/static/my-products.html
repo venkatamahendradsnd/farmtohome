@@ -51,9 +51,21 @@
                     <input type="number" id="p_qty" required min="1">
                 </div>
                 <div class="form-group">
-                    <label>Product Image</label>
-                    <input type="file" id="p_img_file" accept="image/*" required>
-                    <small>Upload a clear image of your produce.</small>
+                    <label for="p_moq">Minimum Order Quantity</label>
+                    <input type="number" id="p_moq" required min="1" value="1">
+                </div>
+                <div class="form-group">
+                    <label for="p_status">Availability</label>
+                    <select id="p_status" required>
+                        <option value="IN_SEASON" selected>In season</option>
+                        <option value="OUT_OF_STOCK">Out of stock</option>
+                        <option value="PAUSED">Paused</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Product Images</label>
+                    <input type="file" id="p_img_files" accept="image/*" multiple>
+                    <small>You can upload multiple images (first image will be the cover).</small>
                 </div>
                 <button type="submit" class="btn-primary" style="width: auto;">Save Product</button>
                 <button type="button" onclick="document.getElementById('addProductForm').style.display='none'"
@@ -95,6 +107,18 @@
                         <label for="edit_p_qty">Quantity</label>
                         <input type="number" id="edit_p_qty" required min="0">
                     </div>
+                    <div class="form-group">
+                        <label for="edit_p_moq">Minimum Order Quantity</label>
+                        <input type="number" id="edit_p_moq" required min="1" value="1">
+                    </div>
+                    <div class="form-group">
+                        <label for="edit_p_status">Availability</label>
+                        <select id="edit_p_status" required>
+                            <option value="IN_SEASON">In season</option>
+                            <option value="OUT_OF_STOCK">Out of stock</option>
+                            <option value="PAUSED">Paused</option>
+                        </select>
+                    </div>
                     <div style="display: flex; justify-content: flex-end; gap: 1rem; margin-top: 1rem;">
                         <button type="button" onclick="closeEditModal()" style="padding: 0.5rem 1rem;">Cancel</button>
                         <button type="submit" class="btn-primary" style="width: auto;">Update</button>
@@ -108,7 +132,7 @@
         </div>
     </div>
 
-    <script src="js/auth.js"></script>
+    <script src="js/auth.js?v=8"></script>
     <script src="js/nav.js"></script>
     <script>
         let categoryMap = {}; // name -> unit
@@ -177,11 +201,12 @@
                 container.innerHTML = products.map(p => {
                     const lowStock = p.quantity < 10 && p.quantity > 0 ? '<span style="color:orange; font-weight:bold; font-size:0.8rem;">Low Stock</span>' : '';
                     const outStock = p.quantity <= 0 ? '<span style="color:red; font-weight:bold; font-size:0.8rem;">Out of Stock</span>' : '';
-                    const unit = categoryMap[p.category] || '';
+                    const unit = p.unit || categoryMap[p.category] || '';
+                    const cover = (p.imageUrls && p.imageUrls.length > 0) ? p.imageUrls[0] : (p.imageUrl || '');
 
                     return `
                      <div class="product-card">
-                        <img src="${p.imageUrl || ''}" class="product-img" onerror="this.src='https://placehold.co/400x300?text=No+Image'">
+                        <img src="${cover}" class="product-img" onerror="this.src='https://placehold.co/400x300?text=No+Image'">
                         <div class="product-info">
                             <div class="product-title">${p.name}</div>
                             <div style="font-size:0.85rem; color:#666; margin-bottom:0.5rem; height: 40px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">
@@ -191,14 +216,18 @@
                             <div style="margin: 0.5rem 0; font-size: 0.9rem;">
                                 Qty: <b>${p.quantity} ${unit}</b> ${lowStock} ${outStock}
                             </div>
+                            <div style="font-size: 0.85rem; color: #666;">
+                                Min order: <b>${p.minOrderQuantity || 1} ${unit}</b>
+                            </div>
                             
                             <div style="display: flex; align-items: center; justify-content: space-between; margin-top: 1rem;">
-                                <div style="display: flex; align-items: center;" title="Toggle Availability / Stock Status">
-                                    <label class="switch">
-                                        <input type="checkbox" ${p.status === 'ACTIVE' ? 'checked' : ''} onchange="toggleStatus(${p.id})">
-                                        <span class="slider round"></span>
-                                    </label>
-                                    <span style="font-size: 0.8rem; color: #666;">${p.status === 'ACTIVE' ? 'Active' : 'Paused'}</span>
+                                <div style="display:flex; align-items:center; gap:0.5rem;">
+                                    <span style="font-size:0.8rem; color:#666;">Status</span>
+                                    <select onchange="setProductStatus(${p.id}, this.value)" style="padding:0.35rem 0.5rem; font-size:0.85rem;">
+                                        <option value="IN_SEASON" ${p.status === 'IN_SEASON' ? 'selected' : ''}>In season</option>
+                                        <option value="OUT_OF_STOCK" ${p.status === 'OUT_OF_STOCK' ? 'selected' : ''}>Out of stock</option>
+                                        <option value="PAUSED" ${p.status === 'PAUSED' ? 'selected' : ''}>Paused</option>
+                                    </select>
                                 </div>
                                 <div style="display: flex; gap: 0.5rem;">
                                     <button onclick='openEditModal(${JSON.stringify(p).replace(/'/g, "&#39;")})' style="background: none; border: 1px solid #ddd; padding: 0.25rem 0.5rem; border-radius: 4px; cursor: pointer;">Edit</button>
@@ -214,25 +243,32 @@
         async function addProduct(e) {
             e.preventDefault();
             const user = JSON.parse(localStorage.getItem('user'));
-            const fileInput = document.getElementById('p_img_file');
-            let imageUrl = '';
+            const fileInput = document.getElementById('p_img_files');
+            let imageUrls = [];
 
-            if (fileInput.files.length > 0) {
-                const formData = new FormData();
-                formData.append('file', fileInput.files[0]);
-                try {
-                    const r = await fetch('/api/images/upload', { method: 'POST', body: formData });
-                    if (r.ok) imageUrl = (await r.json()).imageUrl;
-                } catch (err) { console.error(err); }
+            if (fileInput && fileInput.files && fileInput.files.length > 0) {
+                for (const f of fileInput.files) {
+                    const formData = new FormData();
+                    formData.append('file', f);
+                    try {
+                        const r = await fetch('/api/images/upload', { method: 'POST', body: formData });
+                        if (r.ok) imageUrls.push((await r.json()).imageUrl);
+                    } catch (err) { console.error(err); }
+                }
             }
 
+            const category = document.getElementById('p_category').value;
             const p = {
                 name: document.getElementById('p_name').value,
                 description: document.getElementById('p_desc').value,
-                category: document.getElementById('p_category').value,
+                category: category,
                 price: parseFloat(document.getElementById('p_price').value),
                 quantity: parseInt(document.getElementById('p_qty').value),
-                imageUrl: imageUrl
+                unit: categoryMap[category] || '',
+                minOrderQuantity: parseInt(document.getElementById('p_moq').value),
+                status: document.getElementById('p_status').value,
+                imageUrls: imageUrls,
+                imageUrl: imageUrls.length > 0 ? imageUrls[0] : ''
             };
 
             const res = await fetch(`/api/products/add?farmerId=${user.id}`, {
@@ -262,14 +298,13 @@
             } catch (e) { console.error(e); alert('Error deleting product'); }
         }
 
-        async function toggleStatus(id) {
+        async function setProductStatus(id, status) {
             const user = JSON.parse(localStorage.getItem('user'));
             try {
-                const res = await fetch(`/api/products/status/${id}?farmerId=${user.id}`, { method: 'POST' });
-                if (res.ok) {
-                    loadMyProducts();
-                } else {
-                    alert('Failed to change product status');
+                const res = await fetch(`/api/products/set-status/${id}?farmerId=${user.id}&status=${encodeURIComponent(status)}`, { method: 'POST' });
+                if (!res.ok) {
+                    const t = await res.text();
+                    alert('Failed to change status: ' + t);
                 }
             } catch (e) { console.error(e); alert('Error changing product status'); }
         }
@@ -288,6 +323,8 @@
             document.getElementById('edit_p_category').value = p.category;
             document.getElementById('edit_p_price').value = p.price;
             document.getElementById('edit_p_qty').value = p.quantity;
+            document.getElementById('edit_p_moq').value = p.minOrderQuantity || 1;
+            document.getElementById('edit_p_status').value = p.status || 'IN_SEASON';
 
             // Trigger unit update for edit modal
             updateEditUnitLabels();
@@ -303,12 +340,16 @@
             e.preventDefault();
             const user = JSON.parse(localStorage.getItem('user'));
             const id = document.getElementById('edit_p_id').value;
+            const category = document.getElementById('edit_p_category').value;
             const p = {
                 name: document.getElementById('edit_p_name').value,
                 description: document.getElementById('edit_p_desc').value,
-                category: document.getElementById('edit_p_category').value,
+                category: category,
                 price: parseFloat(document.getElementById('edit_p_price').value),
                 quantity: parseInt(document.getElementById('edit_p_qty').value),
+                unit: categoryMap[category] || '',
+                minOrderQuantity: parseInt(document.getElementById('edit_p_moq').value),
+                status: document.getElementById('edit_p_status').value,
                 // imageUrl is not updated via this modal, so we don't send it.
                 // Backend should handle not overwriting imageUrl if not provided.
             };

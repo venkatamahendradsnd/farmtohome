@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sign In - Farm Direct</title>
+    <link rel="stylesheet" href="css/style.css?v=7">
+    <link rel="icon" type="image/png" href="images/brand.png?v=5">
+    <link href="https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500;600&display=swap" rel="stylesheet">
+</head>
+
+<body class="auth-page">
+    <div class="auth-container">
+        <img src="images/brand.png" alt="Farm Direct" style="height: 100px; margin-bottom: 0; object-fit: contain;">
+        <h2 style="margin-top: 0;">Welcome Back</h2>
+        <p>Please select your login type:</p>
+
+        <div style="display: flex; gap: 1rem; justify-content: center; margin: 1.5rem 0;">
+            <button class="btn-primary"
+                style="min-width: 160px;"
+                onclick="window.location.href='farmer-login.html'">
+                Farmer Login
+            </button>
+            <button class="btn-primary"
+                style="min-width: 160px; background: #2e7d32;"
+                onclick="window.location.href='customer-login.html'">
+                Customer Login
+            </button>
+        </div>
+
+        <p class="auth-link">Don't have an account? <a href="register.html">Register here</a></p>
+        <p class="auth-link"><a href="index.html">Back to Home</a></p>
+    </div>
+
+    <script src="js/auth.js?v=8"></script>
+</body>
+
+</html>
+

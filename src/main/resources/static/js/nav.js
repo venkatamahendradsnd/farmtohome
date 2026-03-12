@@ -1,7 +1,9 @@
 // nav.js
 
 document.addEventListener('DOMContentLoaded', () => {
-    const user = JSON.parse(localStorage.getItem('user'));
+    const rawUser = localStorage.getItem('user');
+    const user = rawUser ? JSON.parse(rawUser) : null;
+    console.log('nav.js loaded, user from storage:', user);
     const navContainer = document.getElementById('navbar-container');
     if (!navContainer) return;
 
@@ -25,17 +27,16 @@ document.addEventListener('DOMContentLoaded', () => {
         if (user.role === 'FARMER') {
             navContent += `
                 <li><a href="farmer-dashboard.html">Dashboard</a></li>
+                <li><a href="farmer-profile-edit.html">My Profile</a></li>
                 <li><a href="my-products.html">My Products</a></li>
                 <li><a href="farmer-orders.html">Orders</a></li>
-            `;
-        } else if (user.role === 'ADMIN') {
-            navContent += `
-                <li><a href="admin-dashboard.html">Admin Dashboard</a></li>
+                <li><a href="chat.html">Messages</a></li>
             `;
         } else {
             navContent += `
                 <li><a href="customer-dashboard.html">My Orders</a></li>
                 <li><a href="cart.html">Cart</a></li>
+                <li><a href="chat.html">Messages</a></li>
             `;
         }
         navContent += `
@@ -44,7 +45,7 @@ document.addEventListener('DOMContentLoaded', () => {
         `;
     } else {
         navContent += `
-            <li><a href="login.html">Login</a></li>
+            <li><a href="signin.html">Login</a></li>
             <li><a href="register.html" class="btn-primary" style="padding: 0.5rem 1rem; color: white;">Register</a></li>
         `;
     }

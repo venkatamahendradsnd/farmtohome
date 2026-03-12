@@ -32,7 +32,7 @@
         </div>
     </div>
 
-    <script src="js/auth.js"></script>
+    <script src="js/auth.js?v=8"></script>
     <script src="js/nav.js"></script>
     <script>
         let cartItems = {}; // Map: productId -> cartItem
@@ -92,11 +92,13 @@
 
                 container.innerHTML = products.map(p => {
                     const inCart = cartItems[p.id];
-                    const unit = categoryMap[p.category] || '';
+                    const unit = p.unit || categoryMap[p.category] || '';
+                    const cover = (p.imageUrls && p.imageUrls.length > 0) ? p.imageUrls[0] : (p.imageUrl || 'https://placehold.co/400x300?text=Product');
+                    const moq = p.minOrderQuantity || 1;
                     return `
                     <div class="product-card">
                         <a href="product-details.html?id=${p.id}" style="text-decoration: none; color: inherit;">
-                            <img src="${p.imageUrl || 'https://placehold.co/400x300?text=Product'}" class="product-img" alt="${p.name}">
+                            <img src="${cover}" class="product-img" alt="${p.name}">
                         </a>
                         <div class="product-info">
                             <a href="product-details.html?id=${p.id}" style="text-decoration: none; color: inherit;">
@@ -109,9 +111,12 @@
                             <div style="font-size: 0.85rem; color: #666; margin-bottom: 0.5rem;">
                                 Qty: ${p.quantity} ${unit}
                             </div>
+                            <div style="font-size: 0.85rem; color: #666; margin-bottom: 0.5rem;">
+                                Min order: ${moq} ${unit}
+                            </div>
                             <div class="farmer-info" style="display: flex; flex-direction: column; align-items: start; gap: 0.25rem;">
                                 <div>
-                                    <span>Sold by: ${p.farmer ? p.farmer.name : 'Unknown'}</span>
+                                    <span>Sold by: ${p.farmer ? `<a href="farmer-profile.html?id=${p.farmer.id}" style="text-decoration: underline; color: inherit;">${p.farmer.name}</a>` : 'Unknown'}</span>
                                     ${p.farmer ? renderBadge(p.farmer) : ''}
                                 </div>
                                 ${p.farmer ? renderStars(p.farmer) : ''}
@@ -128,16 +133,20 @@
 
         function renderActionButtons(product) {
             if (!currentUser) {
-                return `<button onclick="window.location.href='login.html'" class="btn-primary">Login to Buy</button>`;
+                return `<button onclick="window.location.href='signin.html'" class="btn-primary">Login to Buy</button>`;
             }
             if (currentUser.role === 'FARMER') {
                 return `<button disabled class="btn-primary" style="background:#ccc; cursor:not-allowed;">Farmers cannot buy</button>`;
             }
 
             const item = cartItems[product.id];
+            const moq = product.minOrderQuantity || 1;
 
             if (product.status === 'PAUSED') {
                 return `<button disabled class="btn-primary" style="background:#ccc; cursor:not-allowed;">Temporarily Unavailable</button>`;
+            }
+            if (product.status === 'OUT_OF_STOCK') {
+                return `<button disabled class="btn-primary" style="background:#ccc; cursor:not-allowed;">Out of Stock</button>`;
             }
 
             if (product.quantity <= 0) {
@@ -147,24 +156,24 @@
             if (item) {
                 return `
                     <div style="display: flex; align-items: center; gap: 0.5rem; justify-content: center;">
-                        <button onclick="updateQty(${item.id}, ${product.id}, ${item.quantity - 1})" 
+                        <button onclick="updateQty(${item.id}, ${product.id}, ${item.quantity - 1}, ${moq})" 
                             style="background: #e9ecef; border: none; width: 32px; height: 32px; border-radius: 4px; cursor: pointer; font-weight: bold;">-</button>
                         <span style="font-weight: 600; min-width: 20px; text-align: center;">${item.quantity}</span>
-                        <button onclick="updateQty(${item.id}, ${product.id}, ${item.quantity + 1})" 
+                        <button onclick="updateQty(${item.id}, ${product.id}, ${item.quantity + 1}, ${moq})" 
                             style="background: #e9ecef; border: none; width: 32px; height: 32px; border-radius: 4px; cursor: pointer; font-weight: bold;">+</button>
                     </div>
                 `;
             } else {
-                return `<button onclick="addToCart(${product.id})" class="btn-primary">Add to Cart</button>`;
+                return `<button onclick="addToCart(${product.id}, ${moq})" class="btn-primary">Add to Cart</button>`;
             }
         }
 
-        async function addToCart(productId) {
+        async function addToCart(productId, quantity) {
             try {
                 const res = await fetch('/api/cart/add', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ customerId: currentUser.id, productId: productId, quantity: 1 })
+                    body: JSON.stringify({ customerId: currentUser.id, productId: productId, quantity: quantity || 1 })
                 });
                 if (res.ok) {
                     await fetchCart(); // Refresh cart state
@@ -173,8 +182,9 @@
             } catch (e) { console.error(e); }
         }
 
-        async function updateQty(cartItemId, productId, newQty) {
-            if (newQty <= 0) {
+        async function updateQty(cartItemId, productId, newQty, moq) {
+            const minQty = moq || 1;
+            if (newQty < minQty) {
                 // Delete
                 try {
                     const res = await fetch(`/api/cart/remove/${cartItemId}`, { method: 'DELETE' });

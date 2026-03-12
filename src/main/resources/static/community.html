@@ -148,7 +148,7 @@
                             user &&
                             user.role === 'FARMER' &&
                             p.farmer &&
-                            user.id === p.farmer.id
+                            Number(user.id) === Number(p.farmer.id)
                                 ? `
                             <button class="edit-btn"
                                     onclick="editStory(${p.id})">
@@ -187,11 +187,22 @@
     }
 
     async function deleteStory(postId) {
+        if (!user || user.role !== 'FARMER') {
+            alert('Only farmers can delete stories');
+            return;
+        }
+
         if (!confirm("Delete this story?")) return;
 
-        await fetch(`/api/community/post/${postId}`, {
+        const res = await fetch(`/api/community/post/${postId}?userId=${user.id}`, {
             method: 'DELETE'
         });
+
+        if (!res.ok) {
+            const message = await res.text();
+            alert(message || 'Failed to delete story');
+            return;
+        }
 
         loadCommunity();
     }

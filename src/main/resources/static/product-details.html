@@ -98,19 +98,28 @@
                 if (!res.ok) throw new Error('Product not found');
                 const p = await res.json();
                 currentProduct = p;
+                const unit = p.unit || (p.category === 'Vegetables' || p.category === 'Fruits' ? 'Kg' : 'Unit');
+                const cover = (p.imageUrls && p.imageUrls.length > 0) ? p.imageUrls[0] : (p.imageUrl || 'https://placehold.co/400x300?text=No+Image');
+                const moq = p.minOrderQuantity || 1;
 
                 document.title = `${p.name} - Farm Direct`;
-                document.getElementById('p-image').src = p.imageUrl || 'https://placehold.co/400x300?text=No+Image';
+                document.getElementById('p-image').src = cover;
                 document.getElementById('p-name').innerText = p.name;
                 document.getElementById('p-category').innerText = p.category;
-                document.getElementById('p-price').innerText = `₹${p.price} / ${p.category === 'Vegetables' || p.category === 'Fruits' ? 'Kg' : 'Unit'}`; // Approx unit logic
+                document.getElementById('p-price').innerText = `₹${p.price} / ${unit}`;
                 document.getElementById('p-desc').innerText = p.description || 'No description provided.';
 
                 // Farmer Info
                 if (p.farmer) {
-                    document.getElementById('p-farmer').innerText = p.farmer.name;
+                    document.getElementById('p-farmer').innerHTML = `<a href="farmer-profile.html?id=${p.farmer.id}" style="font-weight:700; color: inherit; text-decoration: underline;">${p.farmer.name}</a>`;
                     document.getElementById('p-badge').innerHTML = renderBadge(p.farmer);
                     document.getElementById('p-rating').innerHTML = renderFarmerStars(p.farmer);
+                }
+                // Add quick message button for customers
+                const user = JSON.parse(localStorage.getItem('user'));
+                if (user && user.role === 'CUSTOMER' && p.farmer) {
+                    const msgBtn = `<button onclick="window.location.href='chat.html?farmerId=${p.farmer.id}'" class="btn-primary" style="width:auto; padding:0.5rem 1rem; font-size:0.9rem;">Message Farmer</button>`;
+                    document.getElementById('p-rating').innerHTML = document.getElementById('p-rating').innerHTML + `<div style="margin-top:0.5rem;">${msgBtn}</div>`;
                 }
 
                 renderActionButton();
@@ -153,6 +162,7 @@
             const container = document.getElementById('action-container');
             const user = JSON.parse(localStorage.getItem('user'));
             const p = currentProduct;
+            const moq = p.minOrderQuantity || 1;
 
             if (!user) {
                 container.innerHTML = `<button onclick="window.location.href='login.html'" class="btn-primary" style="width: 100%;">Login to Buy</button>`;
@@ -162,7 +172,7 @@
                 container.innerHTML = `<button disabled class="btn-primary" style="background:#ccc; cursor:not-allowed; width: 100%;">Farmers cannot buy</button>`;
                 return;
             }
-            if (p.status === 'PAUSED' || p.quantity <= 0) {
+            if (p.status === 'PAUSED' || p.status === 'OUT_OF_STOCK' || p.quantity <= 0) {
                 container.innerHTML = `<button disabled class="btn-primary" style="background:#ccc; cursor:not-allowed; width: 100%;">${p.quantity <= 0 ? 'Out of Stock' : 'Unavailable'}</button>`;
                 return;
             }
@@ -171,31 +181,35 @@
             if (item) {
                 container.innerHTML = `
                     <div style="display: flex; align-items: center; gap: 1rem;">
-                        <button onclick="updateQty(${item.id}, ${p.id}, ${item.quantity - 1})" class="btn-primary" style="width: 40px;">-</button>
+                        <button onclick="updateQty(${item.id}, ${p.id}, ${item.quantity - 1}, ${moq})" class="btn-primary" style="width: 40px;">-</button>
                         <span style="font-size: 1.2rem; font-weight: 600;">${item.quantity}</span>
-                        <button onclick="updateQty(${item.id}, ${p.id}, ${item.quantity + 1})" class="btn-primary" style="width: 40px;">+</button>
+                        <button onclick="updateQty(${item.id}, ${p.id}, ${item.quantity + 1}, ${moq})" class="btn-primary" style="width: 40px;">+</button>
                         <span style="margin-left: auto; color: green;">In your cart</span>
                     </div>
                 `;
             } else {
-                container.innerHTML = `<button onclick="addToCart(${p.id})" class="btn-primary" style="width: 100%;">Add to Cart</button>`;
+                container.innerHTML = `
+                    <button onclick="addToCart(${p.id}, ${moq})" class="btn-primary" style="width: 100%;">Add to Cart</button>
+                    <div style="margin-top:0.5rem; color:#666; font-size:0.85rem;">Minimum order: ${moq}</div>
+                `;
             }
         }
 
-        async function addToCart(pid) {
+        async function addToCart(pid, qty) {
             const user = JSON.parse(localStorage.getItem('user'));
             try {
                 const res = await fetch('/api/cart/add', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ customerId: user.id, productId: pid, quantity: 1 })
+                    body: JSON.stringify({ customerId: user.id, productId: pid, quantity: qty || 1 })
                 });
                 if (res.ok) { await fetchCart(); renderActionButton(); }
             } catch (e) { console.error(e); }
         }
 
-        async function updateQty(cid, pid, newQty) {
-            if (newQty <= 0) {
+        async function updateQty(cid, pid, newQty, moq) {
+            const minQty = moq || 1;
+            if (newQty < minQty) {
                 await fetch(`/api/cart/remove/${cid}`, { method: 'DELETE' });
                 delete cartItems[pid];
             } else {

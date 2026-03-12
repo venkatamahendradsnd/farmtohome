@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Messages - Farm Direct</title>
+    <link rel="stylesheet" href="css/style.css?v=7">
+    <link rel="icon" type="image/png" href="images/brand.png?v=5">
+    <link href="https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500;600&display=swap" rel="stylesheet">
+</head>
+
+<body>
+    <div id="navbar-container"></div>
+
+    <div class="container" style="max-width: 1200px;">
+        <h2>Messages</h2>
+
+        <div style="display:grid; grid-template-columns: 340px 1fr; gap:1.25rem; align-items:stretch;">
+            <div style="background:white; border-radius:12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); overflow:hidden;">
+                <div style="padding:1rem; border-bottom:1px solid #eee;">
+                    <input id="threadSearch" type="text" placeholder="Search..."
+                        style="width:100%; padding:0.75rem; border:1px solid #eee; border-radius:8px;">
+                </div>
+                <div id="threads" style="max-height: 70vh; overflow:auto;">
+                    <div style="padding:1rem; color:#666;">Loading conversations...</div>
+                </div>
+            </div>
+
+            <div style="background:white; border-radius:12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); display:flex; flex-direction:column; overflow:hidden;">
+                <div id="chatHeader" style="padding:1rem; border-bottom:1px solid #eee; display:flex; justify-content:space-between; gap:1rem; align-items:center;">
+                    <div>
+                        <div id="chatTitle" style="font-weight:800;">Select a conversation</div>
+                        <div id="chatSubtitle" style="color:#666; font-size:0.9rem;"></div>
+                    </div>
+                    <div id="chatHeaderActions"></div>
+                </div>
+
+                <div id="messages" style="padding:1rem; flex:1; overflow:auto; background:#f8faf8;">
+                    <div style="color:#666;">No conversation selected.</div>
+                </div>
+
+                <div style="padding:1rem; border-top:1px solid #eee;">
+                    <div style="display:flex; gap:0.5rem; align-items:center; flex-wrap:wrap;">
+                        <input type="file" id="photo" accept="image/*" style="max-width: 220px;">
+                        <input id="text" type="text" placeholder="Type a message..." style="flex:1; min-width: 240px;">
+                        <button class="btn-primary" style="width:auto;" onclick="sendMessage()">Send</button>
+                    </div>
+                    <div id="sendStatus" style="margin-top:0.5rem; font-size:0.85rem; color:#666; min-height:18px;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/auth.js?v=8"></script>
+    <script src="js/nav.js"></script>
+    <script>
+        const user = JSON.parse(localStorage.getItem('user'));
+        if (!user) { window.location.href = 'signin.html'; }
+
+        const qs = new URLSearchParams(window.location.search);
+        const openFarmerId = qs.get('farmerId');
+        const openCustomerId = qs.get('customerId');
+
+        let threads = [];
+        let activeThread = null;
+
+        function otherPartyLabel(t) {
+            if (!t) return '';
+            if (user.role === 'FARMER') return t.customer ? t.customer.name : 'Customer';
+            return t.farmer ? t.farmer.name : 'Farmer';
+        }
+
+        function otherPartyId(t) {
+            if (!t) return null;
+            if (user.role === 'FARMER') return t.customer ? t.customer.id : null;
+            return t.farmer ? t.farmer.id : null;
+        }
+
+        async function loadThreads() {
+            const res = await fetch(`/api/chat/threads?userId=${user.id}&role=${encodeURIComponent(user.role)}`);
+            if (!res.ok) { document.getElementById('threads').innerHTML = '<div style="padding:1rem; color:#c62828;">Failed to load.</div>'; return; }
+            threads = await res.json();
+            renderThreads();
+        }
+
+        function renderThreads() {
+            const q = (document.getElementById('threadSearch').value || '').toLowerCase();
+            const container = document.getElementById('threads');
+            const filtered = (threads || []).filter(t => otherPartyLabel(t).toLowerCase().includes(q));
+            if (!filtered || filtered.length === 0) {
+                container.innerHTML = '<div style="padding:1rem; color:#666;">No conversations.</div>';
+                return;
+            }
+            container.innerHTML = filtered.map(t => `
+                <div onclick="openThread(${t.id})" style="padding:1rem; border-bottom:1px solid #f1f1f1; cursor:pointer; background:${activeThread && activeThread.id === t.id ? '#f1f8e9' : 'white'};">
+                    <div style="font-weight:800;">${otherPartyLabel(t)}</div>
+                    <div style="font-size:0.85rem; color:#666;">Updated: ${t.updatedAt ? new Date(t.updatedAt).toLocaleString() : ''}</div>
+                </div>
+            `).join('');
+        }
+
+        async function openThread(threadId) {
+            activeThread = (threads || []).find(t => t.id === threadId) || { id: threadId };
+            renderThreads();
+            await loadMessages();
+        }
+
+        async function ensureThreadWith(farmerId, customerId) {
+            const res = await fetch('/api/chat/thread', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    farmerId: Number(farmerId),
+                    customerId: Number(customerId),
+                    requesterId: user.id
+                })
+            });
+            if (!res.ok) throw new Error(await res.text());
+            return await res.json();
+        }
+
+        async function loadMessages() {
+            if (!activeThread) return;
+            const res = await fetch(`/api/chat/messages/${activeThread.id}?userId=${user.id}`);
+            const container = document.getElementById('messages');
+            if (!res.ok) { container.innerHTML = '<div style="color:#c62828;">Failed to load messages.</div>'; return; }
+            const msgs = await res.json();
+
+            const title = document.getElementById('chatTitle');
+            const subtitle = document.getElementById('chatSubtitle');
+            title.innerText = otherPartyLabel(activeThread) || 'Conversation';
+            const partyId = otherPartyId(activeThread);
+            if (user.role === 'CUSTOMER' && partyId) {
+                subtitle.innerHTML = `<a href="farmer-profile.html?id=${partyId}" style="text-decoration:underline;">View farmer profile</a>`;
+            } else {
+                subtitle.innerText = '';
+            }
+
+            if (!msgs || msgs.length === 0) {
+                container.innerHTML = '<div style="color:#666;">No messages yet. Say hi.</div>';
+                return;
+            }
+            container.innerHTML = msgs.map(m => {
+                const mine = m.sender && m.sender.id === user.id;
+                return `
+                    <div style="display:flex; justify-content:${mine ? 'flex-end' : 'flex-start'}; margin-bottom:0.75rem;">
+                        <div style="max-width: 75%; background:${mine ? '#e8f5e9' : 'white'}; border:1px solid #eaeaea; border-radius:12px; padding:0.75rem;">
+                            <div style="font-size:0.8rem; color:#666; margin-bottom:0.25rem;">${m.sender ? m.sender.name : ''}</div>
+                            ${m.text ? `<div style="white-space:pre-wrap; color:#333;">${escapeHtml(m.text)}</div>` : ''}
+                            ${m.imageUrl ? `<div style="margin-top:0.5rem;"><img src="${m.imageUrl}" style="max-width: 260px; border-radius:10px; border:1px solid #eee;"></div>` : ''}
+                            <div style="font-size:0.75rem; color:#999; margin-top:0.4rem; text-align:right;">${m.createdAt ? new Date(m.createdAt).toLocaleString() : ''}</div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function escapeHtml(str) {
+            return String(str)
+                .replaceAll('&', '&amp;')
+                .replaceAll('<', '&lt;')
+                .replaceAll('>', '&gt;')
+                .replaceAll('"', '&quot;')
+                .replaceAll("'", '&#039;');
+        }
+
+        async function uploadPhotoIfAny() {
+            const fileInput = document.getElementById('photo');
+            if (!fileInput || !fileInput.files || fileInput.files.length === 0) return null;
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+            const r = await fetch('/api/images/upload', { method: 'POST', body: formData });
+            if (!r.ok) return null;
+            return (await r.json()).imageUrl;
+        }
+
+        async function sendMessage() {
+            const status = document.getElementById('sendStatus');
+            if (!activeThread) { status.innerText = 'Select a conversation first.'; return; }
+            status.innerText = 'Sending...';
+            try {
+                const imageUrl = await uploadPhotoIfAny();
+                const text = document.getElementById('text').value;
+                const res = await fetch(`/api/chat/messages/${activeThread.id}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ senderId: user.id, text: text, imageUrl: imageUrl })
+                });
+                if (!res.ok) { status.innerText = 'Send failed: ' + await res.text(); return; }
+                document.getElementById('text').value = '';
+                document.getElementById('photo').value = '';
+                status.innerText = '';
+                await loadThreads();
+                // keep activeThread object in sync (updatedAt changes)
+                activeThread = (threads || []).find(t => t.id === activeThread.id) || activeThread;
+                await loadMessages();
+            } catch (e) {
+                console.error(e);
+                status.innerText = 'Send failed.';
+            }
+        }
+
+        document.getElementById('threadSearch').addEventListener('input', renderThreads);
+
+        async function init() {
+            await loadThreads();
+
+            // Deep-link support: open a specific farmer/customer chat
+            if (user.role === 'CUSTOMER' && openFarmerId) {
+                const t = await ensureThreadWith(openFarmerId, user.id);
+                await loadThreads();
+                await openThread(t.id);
+            } else if (user.role === 'FARMER' && openCustomerId) {
+                const t = await ensureThreadWith(user.id, openCustomerId);
+                await loadThreads();
+                await openThread(t.id);
+            } else if (threads && threads.length > 0) {
+                await openThread(threads[0].id);
+            }
+        }
+
+        init();
+    </script>
+</body>
+
+</html>
+

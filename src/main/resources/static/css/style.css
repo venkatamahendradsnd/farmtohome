@@ -355,13 +355,24 @@ textarea:focus {
     color: #EF6C00;
 }
 
+.status-PLACED {
+    background-color: #FFF3E0;
+    color: #EF6C00;
+}
+
 .status-CONFIRMED,
+.status-ACCEPTED,
 .status-FARMER_APPROVED {
     background-color: #E3F2FD;
     color: #1565C0;
 }
 
 .status-SHIPPED {
+    background-color: #E8F5E9;
+    color: #2E7D32;
+}
+
+.status-OUT_FOR_DELIVERY {
     background-color: #E8F5E9;
     color: #2E7D32;
 }

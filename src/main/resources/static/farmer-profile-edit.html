@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Profile - Farm Direct</title>
+    <link rel="stylesheet" href="css/style.css?v=7">
+    <link rel="icon" type="image/png" href="images/brand.png?v=5">
+    <link href="https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500;600&display=swap" rel="stylesheet">
+</head>
+
+<body>
+    <div id="navbar-container"></div>
+
+    <div class="container" style="max-width: 800px;">
+        <h2>My Farmer Profile</h2>
+        <p style="color:#666; margin-top:-0.5rem;">This is what customers will see on your public profile.</p>
+
+        <div style="background:white; padding:2rem; border-radius:12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05);">
+            <div style="display:flex; gap:1.5rem; flex-wrap:wrap; align-items:center;">
+                <div style="width:140px; height:140px; border-radius:12px; overflow:hidden; background:#f4f4f4;">
+                    <img id="photoPreview" src="https://placehold.co/200x200?text=Farmer" alt="Photo"
+                        style="width:100%; height:100%; object-fit:cover;">
+                </div>
+                <div style="flex:1; min-width:260px;">
+                    <div class="form-group">
+                        <label>Profile Photo</label>
+                        <input type="file" id="photoFile" accept="image/*">
+                        <small>Upload a clear photo of you or your farm.</small>
+                    </div>
+                </div>
+            </div>
+
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:1rem;">
+                <div class="form-group">
+                    <label>Farm Name</label>
+                    <input type="text" id="farmName" placeholder="e.g., Green Valley Farms">
+                </div>
+                <div class="form-group">
+                    <label>State</label>
+                    <input type="text" id="state" placeholder="State">
+                </div>
+                <div class="form-group">
+                    <label>District</label>
+                    <input type="text" id="district" placeholder="District">
+                </div>
+                <div class="form-group" style="grid-column: 1 / -1;">
+                    <label>Pickup Address</label>
+                    <input type="text" id="pickupAddress" placeholder="Address customers should use for pickup">
+                </div>
+                <div class="form-group">
+                    <label>Public Profile Link</label>
+                    <input type="text" id="publicLink" readonly>
+                </div>
+            </div>
+
+            <div class="form-group" style="margin-top:0.5rem;">
+                <label>Short Story</label>
+                <textarea id="story" rows="6" placeholder="Tell customers about your farm, how you grow produce, pesticide practices, harvesting, etc."></textarea>
+            </div>
+
+            <div style="display:flex; justify-content:flex-end; gap:0.75rem; margin-top:1rem;">
+                <button onclick="deleteAccount()" style="padding:0.75rem 1rem; border:1px solid #dc3545; color:#dc3545; background:white;">Delete Account</button>
+                <button onclick="window.location.href='farmer-dashboard.html'" style="padding:0.75rem 1rem;">Back</button>
+                <button onclick="saveProfile()" class="btn-primary" style="width:auto;">Save Profile</button>
+            </div>
+
+            <div id="saveStatus" style="margin-top:1rem; font-weight:700; min-height:24px;"></div>
+        </div>
+    </div>
+
+    <script src="js/auth.js?v=8"></script>
+    <script src="js/nav.js"></script>
+    <script>
+        const user = JSON.parse(localStorage.getItem('user'));
+        if (!user || user.role !== 'FARMER') { window.location.href = 'login.html'; }
+
+        document.getElementById('publicLink').value = `${window.location.origin}/farmer-profile.html?id=${user.id}`;
+
+        document.getElementById('photoFile').addEventListener('change', () => {
+            const f = document.getElementById('photoFile').files[0];
+            if (f) document.getElementById('photoPreview').src = URL.createObjectURL(f);
+        });
+
+        async function loadProfile() {
+            try {
+                const res = await fetch(`/api/farmer/profile/${user.id}`);
+                if (!res.ok) return;
+                const p = await res.json();
+                document.getElementById('farmName').value = p.farmName || '';
+                document.getElementById('state').value = p.state || '';
+                document.getElementById('district').value = p.district || '';
+                document.getElementById('pickupAddress').value = p.pickupAddress || '';
+                document.getElementById('story').value = p.story || '';
+                if (p.photoUrl) document.getElementById('photoPreview').src = p.photoUrl;
+            } catch (e) { console.error(e); }
+        }
+
+        async function uploadPhotoIfAny() {
+            const fileInput = document.getElementById('photoFile');
+            if (!fileInput || !fileInput.files || fileInput.files.length === 0) return null;
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+            const r = await fetch('/api/images/upload', { method: 'POST', body: formData });
+            if (!r.ok) return null;
+            return (await r.json()).imageUrl;
+        }
+
+        async function saveProfile() {
+            const status = document.getElementById('saveStatus');
+            status.style.color = '#666';
+            status.innerText = 'Saving...';
+            try {
+                const photoUrl = await uploadPhotoIfAny();
+                const payload = {
+                    farmName: document.getElementById('farmName').value,
+                    state: document.getElementById('state').value,
+                    district: document.getElementById('district').value,
+                    pickupAddress: document.getElementById('pickupAddress').value,
+                    story: document.getElementById('story').value,
+                };
+                if (photoUrl) payload.photoUrl = photoUrl;
+
+                const res = await fetch(`/api/farmer/profile/${user.id}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                if (res.ok) {
+                    status.style.color = '#2e7d32';
+                    status.innerText = 'Saved successfully.';
+                } else {
+                    status.style.color = '#c62828';
+                    status.innerText = 'Save failed: ' + await res.text();
+                }
+            } catch (e) {
+                console.error(e);
+                status.style.color = '#c62828';
+                status.innerText = 'Save failed.';
+            }
+        }
+
+        async function deleteAccount() {
+            if (!confirm('Delete farmer account permanently? This cannot be undone.')) return;
+            try {
+                const res = await fetch(`/api/farmer/account/${user.id}`, { method: 'DELETE' });
+                if (!res.ok) {
+                    const t = await res.text();
+                    alert('Delete failed: ' + t);
+                    return;
+                }
+                localStorage.removeItem('user');
+                alert('Account deleted successfully.');
+                window.location.href = 'index.html';
+            } catch (e) {
+                console.error(e);
+                alert('Delete failed.');
+            }
+        }
+
+        loadProfile();
+    </script>
+</body>
+
+</html>
+

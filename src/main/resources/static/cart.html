@@ -60,30 +60,40 @@
                 }
 
                 let total = 0;
-                let hasOutOfStock = false;
+                let hasUnavailable = false;
                 container.innerHTML = items.map(item => {
                     const lineTotal = item.product.price * item.quantity;
                     total += lineTotal;
-                    const unit = categoryMap[item.product.category] || '';
-                    const isOutOfStock = item.product.status === 'OUT_OF_STOCK';
-                    if (isOutOfStock) hasOutOfStock = true;
-                    
-                    const statusColor = item.product.status === 'OUT_OF_STOCK' ? '#dc3545' : item.product.status === 'PAUSED' ? '#fd7e14' : '#198754';
-                    const statusText = item.product.status === 'OUT_OF_STOCK' ? 'OUT OF STOCK' : item.product.status === 'PAUSED' ? 'PAUSED' : 'ACTIVE';
+                    const unit = item.product.unit || categoryMap[item.product.category] || '';
+                    const status = item.product.status || 'IN_SEASON';
+                    const isUnavailable = status === 'DELETED' || status === 'OUT_OF_STOCK' || status === 'PAUSED' || (item.product.quantity != null && item.product.quantity <= 0);
+                    if (isUnavailable) hasUnavailable = true;
+
+                    const statusColor =
+                        status === 'DELETED' ? '#6c757d' :
+                        status === 'OUT_OF_STOCK' ? '#dc3545' :
+                        status === 'PAUSED' ? '#fd7e14' : '#198754';
+                    const statusText =
+                        status === 'DELETED' ? 'DELETED' :
+                        status === 'OUT_OF_STOCK' ? 'OUT OF STOCK' :
+                        status === 'PAUSED' ? 'PAUSED' : 'IN SEASON';
+                    const moq = item.product.minOrderQuantity || 1;
+                    const cover = (item.product.imageUrls && item.product.imageUrls.length > 0) ? item.product.imageUrls[0] : (item.product.imageUrl || 'https://placehold.co/100x100');
                     
                     return `
-                        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #eee; padding: 1rem 0; opacity: ${isOutOfStock ? '0.6' : '1'};">
+                        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #eee; padding: 1rem 0; opacity: ${isUnavailable ? '0.6' : '1'};">
                             <div style="display: flex; gap: 1rem; align-items: center; flex: 1;">
-                                <img src="${item.product.imageUrl || 'https://placehold.co/100x100'}" style="width: 60px; height: 60px; object-fit: cover; border-radius: 4px;">
+                                <img src="${cover}" style="width: 60px; height: 60px; object-fit: cover; border-radius: 4px;">
                                 <div style="flex: 1;">
                                     <div style="font-weight: 600;">${item.product.name}</div>
                                     <div style="font-size: 0.8rem; color: ${statusColor}; font-weight: 600; margin-top: 4px;">${statusText}</div>
+                                    <div style="font-size: 0.8rem; color: #666; margin-top: 2px;">Min order: ${moq} ${unit}</div>
                                     <div style="display: flex; align-items: center; gap: 0.5rem; margin-top: 5px;">
-                                        <button onclick="updateCartQty(${item.id}, ${item.quantity - 1})" 
-                                            style="background: #e9ecef; border: none; width: 24px; height: 24px; border-radius: 4px; cursor: pointer;" ${isOutOfStock ? 'disabled' : ''}>-</button>
+                                        <button onclick="updateCartQty(${item.id}, ${item.quantity - 1}, ${moq})" 
+                                            style="background: #e9ecef; border: none; width: 24px; height: 24px; border-radius: 4px; cursor: pointer;" ${isUnavailable ? 'disabled' : ''}>-</button>
                                         <span style="font-size: 0.9rem; color: #666; min-width: 20px; text-align: center;">${item.quantity} ${unit}</span>
-                                        <button onclick="updateCartQty(${item.id}, ${item.quantity + 1})" 
-                                            style="background: #e9ecef; border: none; width: 24px; height: 24px; border-radius: 4px; cursor: pointer;" ${isOutOfStock ? 'disabled' : ''}>+</button>
+                                        <button onclick="updateCartQty(${item.id}, ${item.quantity + 1}, ${moq})" 
+                                            style="background: #e9ecef; border: none; width: 24px; height: 24px; border-radius: 4px; cursor: pointer;" ${isUnavailable ? 'disabled' : ''}>+</button>
                                         <span style="font-size: 0.8rem; color: #666; margin-left: 5px;">x ₹${item.product.price} / ${unit}</span>
                                     </div>
                                 </div>
@@ -98,17 +108,17 @@
                     <div style="margin-top: 1rem; text-align: right; font-size: 1.25rem; font-weight: 700;">
                         Total: ₹${total.toFixed(2)}
                     </div>
-                    ${hasOutOfStock ? `
+                    ${hasUnavailable ? `
                         <div style="margin-top: 1rem; padding: 1rem; background: #f8d7da; border: 1px solid #f5c6cb; border-radius: 4px; color: #721c24; font-size: 0.9rem;">
-                            <strong>⚠️ Cannot Checkout:</strong> Some items in your cart are out of stock. Please remove them to proceed with checkout.
+                            <strong>⚠️ Cannot Checkout:</strong> Some items in your cart are unavailable (deleted/out of stock/paused). Please remove them to proceed.
                         </div>
                     ` : ''}
                 `;
 
                 const checkoutBtn = document.getElementById('checkout-btn');
                 checkoutBtn.style.display = 'inline-block';
-                checkoutBtn.disabled = hasOutOfStock;
-                if (hasOutOfStock) {
+                checkoutBtn.disabled = hasUnavailable;
+                if (hasUnavailable) {
                     checkoutBtn.style.opacity = '0.5';
                     checkoutBtn.style.cursor = 'not-allowed';
                 } else {
@@ -118,8 +128,9 @@
             } catch (e) { console.error(e); }
         }
 
-        async function updateCartQty(cartItemId, newQty) {
-            if (newQty <= 0) {
+        async function updateCartQty(cartItemId, newQty, moq) {
+            const minQty = moq || 1;
+            if (newQty < minQty) {
                 removeItem(cartItemId);
             } else {
                 try {

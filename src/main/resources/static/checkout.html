@@ -18,8 +18,36 @@
 
         <div
             style="background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); margin-top: 1rem;">
+            <h3>Delivery Type</h3>
+            <div style="margin-top: 0.75rem; display: flex; gap: 0.75rem; flex-wrap: wrap;">
+                <label style="display:flex; align-items:center; gap:0.5rem; padding:0.75rem 1rem; border:1px solid #eee; border-radius:6px; cursor:pointer;">
+                    <input type="radio" name="deliveryType" value="DELIVERY" checked>
+                    <span><strong>Delivery</strong></span>
+                </label>
+                <label style="display:flex; align-items:center; gap:0.5rem; padding:0.75rem 1rem; border:1px solid #eee; border-radius:6px; cursor:pointer;">
+                    <input type="radio" name="deliveryType" value="PICKUP">
+                    <span><strong>Pickup</strong></span>
+                </label>
+            </div>
+
+            <div style="margin-top: 1rem;">
+                <label style="display:block; font-weight:600; color:#6c757d; font-size:0.9rem; margin-bottom:0.5rem;">Preferred Slot</label>
+                <select id="preferredSlot" style="width: 100%; padding: 0.75rem; border:1px solid #eee; border-radius:6px;">
+                    <option value="">No preference</option>
+                    <option value="Today 6-8 PM">Today 6-8 PM</option>
+                    <option value="Tomorrow 6-8 AM">Tomorrow 6-8 AM</option>
+                    <option value="Tomorrow 9-11 AM">Tomorrow 9-11 AM</option>
+                    <option value="Tomorrow 4-6 PM">Tomorrow 4-6 PM</option>
+                    <option value="Tomorrow 6-8 PM">Tomorrow 6-8 PM</option>
+                </select>
+                <div style="font-size: 0.85rem; color: #666; margin-top: 0.5rem;">This is shared with the farmer (no courier integration).</div>
+            </div>
+
+            <hr style="margin: 2rem 0; border: none; border-top: 1px solid #eee;">
+
             <h3>Select Delivery Address</h3>
-            <div id="address-list">
+            <div id="addressSection">
+                <div id="address-list">
                 <p>Loading addresses...</p>
             </div>
 
@@ -38,6 +66,15 @@
                 <input type="text" id="addr_pin" placeholder="Pincode"
                     style="width: 100%; margin-bottom: 0.5rem; padding: 0.5rem;">
                 <button onclick="saveAddress()" class="btn-primary" style="width: auto;">Save Address</button>
+            </div>
+            </div>
+
+            <div id="pickupSection" style="display:none;">
+                <h3>Pickup Address</h3>
+                <div id="pickupAddressList" style="padding: 0.75rem; border: 1px solid #eee; border-radius: 6px; background:#fafafa;">
+                    Loading pickup addresses...
+                </div>
+                <div style="font-size: 0.85rem; color: #666; margin-top: 0.5rem;">Pickup address is auto-fetched from farmer profile.</div>
             </div>
 
             <hr style="margin: 2rem 0; border: none; border-top: 1px solid #eee;">
@@ -82,6 +119,99 @@
     <script src="js/nav.js"></script>
     <script>
         let selectedAddressId = null;
+        let pickupAddressSummary = '';
+        function getSelectedDeliveryType() {
+            const el = document.querySelector('input[name="deliveryType"]:checked');
+            return el ? el.value : 'DELIVERY';
+        }
+
+        function formatDateLabel(d) {
+            const weekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            return `${weekdays[d.getDay()]}, ${String(d.getDate()).padStart(2, '0')} ${months[d.getMonth()]}`;
+        }
+
+        function populatePreferredSlots() {
+            const select = document.getElementById('preferredSlot');
+            if (!select) return;
+            const windows = [
+                { label: '6AM-9AM', startHour: 6, endHour: 9 },
+                { label: '9AM-12PM', startHour: 9, endHour: 12 },
+                { label: '12PM-3PM', startHour: 12, endHour: 15 },
+                { label: '3PM-9PM', startHour: 15, endHour: 21 }
+            ];
+            const now = new Date();
+            const dayNames = ['Today', 'Tomorrow', 'Day After Tomorrow'];
+            select.innerHTML = '<option value="">No preference</option>';
+            for (let i = 0; i < 3; i++) {
+                const d = new Date(now);
+                d.setDate(now.getDate() + i);
+                const labelBase = `${dayNames[i]} (${formatDateLabel(d)})`;
+                for (const w of windows) {
+                    // For "Today", only future/ongoing feasible windows should be shown.
+                    if (i === 0) {
+                        const slotEnd = new Date(d);
+                        slotEnd.setHours(w.endHour, 0, 0, 0);
+                        if (now >= slotEnd) {
+                            continue;
+                        }
+                    }
+                    const v = `${labelBase} ${w.label}`;
+                    const opt = document.createElement('option');
+                    opt.value = v;
+                    opt.textContent = v;
+                    select.appendChild(opt);
+                }
+            }
+        }
+
+        function syncDeliveryUI() {
+            const type = getSelectedDeliveryType();
+            const addressSection = document.getElementById('addressSection');
+            const pickupSection = document.getElementById('pickupSection');
+            if (!addressSection || !pickupSection) return;
+            if (type === 'DELIVERY') {
+                addressSection.style.display = 'block';
+                pickupSection.style.display = 'none';
+            } else {
+                addressSection.style.display = 'none';
+                pickupSection.style.display = 'block';
+            }
+        }
+
+        async function loadPickupAddresses() {
+            const user = JSON.parse(localStorage.getItem('user'));
+            if (!user) return;
+            const box = document.getElementById('pickupAddressList');
+            if (!box) return;
+            try {
+                const res = await fetch(`/api/farmer/pickup-addresses/${user.id}`);
+                if (!res.ok) {
+                    box.innerHTML = '<span style="color:#c62828;">Unable to load pickup addresses</span>';
+                    pickupAddressSummary = '';
+                    return;
+                }
+                const list = await res.json();
+                if (!list || list.length === 0) {
+                    box.innerHTML = '<span style="color:#666;">No pickup address found for items in cart.</span>';
+                    pickupAddressSummary = '';
+                    return;
+                }
+                pickupAddressSummary = list
+                    .map(r => `${r.farmName || r.farmerName}: ${r.pickupAddress || 'Not set'}`)
+                    .join(' | ');
+                box.innerHTML = list.map(r => `
+                    <div style="padding:0.5rem 0; border-bottom:1px solid #eee;">
+                        <div style="font-weight:600;">${r.farmName || r.farmerName}</div>
+                        <div style="font-size:0.9rem; color:#444;">${r.pickupAddress || '<span style="color:#c62828;">Pickup address not set by farmer</span>'}</div>
+                    </div>
+                `).join('');
+            } catch (e) {
+                console.error(e);
+                box.innerHTML = '<span style="color:#c62828;">Unable to load pickup addresses</span>';
+                pickupAddressSummary = '';
+            }
+        }
 
         async function loadAddresses() {
             const user = JSON.parse(localStorage.getItem('user'));
@@ -137,8 +267,40 @@
         }
 
         async function processPayment() {
-            if (!selectedAddressId) {
+            const user = JSON.parse(localStorage.getItem('user'));
+            if (!user) { window.location.href = 'login.html'; return; }
+
+            // Always re-validate cart availability right before payment/order.
+            try {
+                const cartRes = await fetch(`/api/cart/${user.id}`);
+                const cartItems = cartRes.ok ? await cartRes.json() : [];
+                const hasUnavailable = (cartItems || []).some(ci => {
+                    const p = ci.product || {};
+                    return p.status === 'DELETED' || p.status === 'OUT_OF_STOCK' || p.status === 'PAUSED' || (p.quantity != null && p.quantity <= 0);
+                });
+                if (hasUnavailable) {
+                    alert('Some items are unavailable (deleted/out of stock/paused). Please remove them from cart before checkout.');
+                    window.location.href = 'cart.html';
+                    return;
+                }
+            } catch (e) {
+                console.error(e);
+                alert('Unable to verify cart items. Please try again.');
+                return;
+            }
+
+            const deliveryType = getSelectedDeliveryType();
+            const preferredSlot = document.getElementById('preferredSlot') ? document.getElementById('preferredSlot').value : '';
+
+            if (deliveryType === 'DELIVERY' && !selectedAddressId) {
                 alert('Please select a delivery address');
+                return;
+            }
+            if (deliveryType === 'PICKUP' && (!pickupAddressSummary || pickupAddressSummary.trim() === '')) {
+                await loadPickupAddresses();
+            }
+            if (deliveryType === 'PICKUP' && (!pickupAddressSummary || pickupAddressSummary.trim() === '')) {
+                alert('Pickup address is not available for items in your cart.');
                 return;
             }
 
@@ -171,16 +333,15 @@
                     }
                 }
 
-                const user = JSON.parse(localStorage.getItem('user'));
                 const contactNumber = document.getElementById('contactNumber').value;
 
                 // Place Order
-                await placeOrder(user.id, selectedAddressId, paymentMethod, contactNumber);
+                await placeOrder(user.id, selectedAddressId, paymentMethod, contactNumber, deliveryType, preferredSlot, pickupAddressSummary);
 
             }, 1000);
         }
 
-        async function placeOrder(customerId, addressId, paymentMethod, contactNumber) {
+        async function placeOrder(customerId, addressId, paymentMethod, contactNumber, deliveryType, preferredSlot, pickupAddress) {
             const btn = document.getElementById('payBtn');
             try {
                 const res = await fetch('/api/orders/place', {
@@ -188,7 +349,10 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         customerId: customerId,
-                        addressId: addressId,
+                        addressId: deliveryType === 'DELIVERY' ? addressId : null,
+                        deliveryType: deliveryType,
+                        preferredSlot: preferredSlot,
+                        deliveryAddress: deliveryType === 'PICKUP' ? pickupAddress : null,
                         paymentMethod: paymentMethod,
                         contactNumber: contactNumber,
                         paymentAmount: 0.0 // Backend will calc real amount
@@ -216,8 +380,13 @@
             }
         }
 
+        populatePreferredSlots();
         loadAddresses();
+        loadPickupAddresses();
+        document.querySelectorAll('input[name="deliveryType"]').forEach(el => el.addEventListener('change', syncDeliveryUI));
+        syncDeliveryUI();
     </script>
 </body>
 
 </html>
+
